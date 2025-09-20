@@ -1,8 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Frame Picker Video Player</title>
+  <meta charset="utf-8" />
+  <title>Frame Picker — Pixel & Color Bit Filter</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     body {
       display: flex;
@@ -10,64 +11,81 @@
       align-items: center;
       background: #111;
       color: #eee;
-      font-family: sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      padding: 16px;
     }
     canvas {
       border: 2px solid #444;
       margin-top: 10px;
-      /* keep visible canvas size fixed */
       width: 640px;
       height: 480px;
-      image-rendering: pixelated; /* ensure chunky pixels when scaled */
+      image-rendering: pixelated;
+      background: black;
     }
     .controls {
       margin-top: 10px;
       display: flex;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
       justify-content: center;
+      align-items: center;
     }
-    button, input {
-      padding: 5px;
+    button, input, select, label {
+      padding: 6px;
       border-radius: 6px;
       border: none;
-    }
-    button {
-      background: #444;
+      background: #222;
       color: #eee;
-      cursor: pointer;
     }
-    button:hover {
-      background: #666;
-    }
-    h1 {
-      font-size: 1.5rem;
-      margin-top: 20px;
-    }
-    #frameInfo {
-      margin-top: 10px;
-      font-size: 1rem;
-    }
+    button { cursor: pointer; }
+    button:hover { background: #333; }
+    h1 { font-size: 1.25rem; margin: 8px 0; }
+    #frameInfo { margin-top: 8px; font-size: 0.95rem; }
+    .group { display:flex; gap:6px; align-items:center; }
   </style>
 </head>
 <body>
-  <h1>Frame Selector Video Player</h1>
-  
-  <input type="file" id="fileInput" accept="video/*"><br>
+  <h1>Frame Picker — Pixel & Color Bit Filter</h1>
+
+  <input type="file" id="fileInput" accept="video/*">
 
   <div class="controls">
-    <button id="prevFrame">◀ Prev</button>
-    <button id="nextFrame">Next ▶</button>
-    <label>
-      Resolution: 
-      <input type="number" id="width" value="64" style="width: 60px;"> × 
-      <input type="number" id="height" value="48" style="width: 60px;">
-    </label>
-    <label>
-      FPS:
-      <input type="number" id="fps" value="30" style="width: 60px;">
-    </label>
-    <button id="applyRes">Apply</button>
+    <div class="group">
+      <button id="prevFrame">◀ Prev</button>
+      <button id="nextFrame">Next ▶</button>
+    </div>
+
+    <div class="group">
+      <label>Resolution:
+        <input type="number" id="width" value="64" style="width:70px"> ×
+        <input type="number" id="height" value="48" style="width:70px">
+      </label>
+      <button id="applyRes">Apply</button>
+    </div>
+
+    <div class="group">
+      <label>FPS:
+        <input type="number" id="fps" value="30" style="width:70px">
+      </label>
+    </div>
+
+    <div class="group">
+      <label>Quant Mode:
+        <select id="quantMode">
+          <option value="perChannel">Bits per channel</option>
+          <option value="palette">Palette (total colors)</option>
+        </select>
+      </label>
+      <label id="bitsLabel">Bits:
+        <input type="number" id="bits" value="2" min="1" max="8" style="width:70px">
+      </label>
+    </div>
+
+    <div class="group">
+      <label>
+        <input type="checkbox" id="grayscale"> Grayscale
+      </label>
+    </div>
   </div>
 
   <div id="frameInfo">Frame: 0 / 0</div>
@@ -76,89 +94,195 @@
   <canvas id="canvas" width="640" height="480"></canvas>
 
   <script>
-    const fileInput = document.getElementById("fileInput");
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
+    // Elements
+    const fileInput = document.getElementById('fileInput');
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
-    const prevBtn = document.getElementById("prevFrame");
-    const nextBtn = document.getElementById("nextFrame");
-    const applyRes = document.getElementById("applyRes");
-    const widthInput = document.getElementById("width");
-    const heightInput = document.getElementById("height");
-    const fpsInput = document.getElementById("fps");
-    const frameInfo = document.getElementById("frameInfo");
+    const prevBtn = document.getElementById('prevFrame');
+    const nextBtn = document.getElementById('nextFrame');
+    const applyRes = document.getElementById('applyRes');
+    const widthInput = document.getElementById('width');
+    const heightInput = document.getElementById('height');
+    const fpsInput = document.getElementById('fps');
+    const frameInfo = document.getElementById('frameInfo');
+    const quantMode = document.getElementById('quantMode');
+    const bitsInput = document.getElementById('bits');
+    const grayscaleCB = document.getElementById('grayscale');
 
-    // buffer canvas for low-res rendering
-    const buffer = document.createElement("canvas");
-    const bctx = buffer.getContext("2d");
+    // Buffer canvas (low-res)
+    const buffer = document.createElement('canvas');
+    const bctx = buffer.getContext('2d');
     bctx.imageSmoothingEnabled = false;
 
-    let step = 1/30; 
+    let step = 1 / 30;
     let totalFrames = 0;
 
-    fileInput.addEventListener("change", e => {
-      const file = e.target.files[0];
-      if (file) {
-        video.src = URL.createObjectURL(file);
-        video.load();
-        video.addEventListener("loadedmetadata", () => {
-          setStepFromFPS();
-          setBufferSize();
-          totalFrames = Math.floor(video.duration / step);
-          updateFrameInfo();
-          video.currentTime = 0;
-        }, { once: true });
+    // --- helpers for quantization ---
+
+    // quantize value (0-255) into "levels" number of levels (levels >= 1)
+    function quantizeChannel(value, levels) {
+      if (levels <= 1) return 0;
+      const t = Math.round((value / 255) * (levels - 1));
+      return Math.round((t / (levels - 1)) * 255);
+    }
+
+    // Given bits per channel, compute levels per channel
+    function levelsFromBitsPerChannel(bits) {
+      const b = Math.max(1, Math.min(8, Math.floor(bits)));
+      return Math.pow(2, b);
+    }
+
+    // For palette mode: given totalColors = 2^bits, approximate per-channel levels
+    // by taking cube root and rounding. This is a simple uniform palette approximation.
+    function levelsFromTotalColors(totalColors) {
+      const approx = Math.max(1, Math.round(Math.pow(totalColors, 1 / 3)));
+      return { r: approx, g: approx, b: approx };
+    }
+
+    // apply quantization to ImageData in-place
+    function applyQuantization(imageData) {
+      const mode = quantMode.value;
+      const bits = Math.max(1, Math.min(24, parseInt(bitsInput.value) || 2));
+      const gs = grayscaleCB.checked;
+      const data = imageData.data;
+      if (mode === 'perChannel') {
+        // bits is used as bits per channel (1-8)
+        const levels = levelsFromBitsPerChannel(bits);
+        for (let i = 0; i < data.length; i += 4) {
+          if (gs) {
+            const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+            const q = quantizeChannel(lum, levels);
+            data[i] = data[i + 1] = data[i + 2] = q;
+          } else {
+            data[i] = quantizeChannel(data[i], levels);       // R
+            data[i + 1] = quantizeChannel(data[i + 1], levels); // G
+            data[i + 2] = quantizeChannel(data[i + 2], levels); // B
+          }
+          // alpha remains
+        }
+      } else {
+        // palette mode: bits = total bits -> totalColors = 2^bits (but we clamp bits to reasonable)
+        const maxBits = Math.min(24, bits);
+        const totalColors = Math.pow(2, maxBits);
+        // approximate levels per channel by cube root of total colors
+        const approx = levelsFromTotalColors(totalColors);
+        const levelsR = approx.r;
+        const levelsG = approx.g;
+        const levelsB = approx.b;
+        for (let i = 0; i < data.length; i += 4) {
+          if (gs) {
+            const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+            const q = quantizeChannel(lum, Math.max(1, Math.round(Math.cbrt(totalColors))));
+            data[i] = data[i + 1] = data[i + 2] = q;
+          } else {
+            data[i] = quantizeChannel(data[i], levelsR);
+            data[i + 1] = quantizeChannel(data[i + 1], levelsG);
+            data[i + 2] = quantizeChannel(data[i + 2], levelsB);
+          }
+        }
       }
-    });
+    }
+
+    // --- UI & drawing ---
 
     function setStepFromFPS() {
-      const fps = parseFloat(fpsInput.value) || 30;
+      const fps = Math.max(1, parseFloat(fpsInput.value) || 30);
       step = 1 / fps;
-      if (video.duration) {
-        totalFrames = Math.floor(video.duration / step);
-      }
+      if (video.duration) totalFrames = Math.floor(video.duration / step);
       updateFrameInfo();
     }
 
     function setBufferSize() {
-      buffer.width = parseInt(widthInput.value);
-      buffer.height = parseInt(heightInput.value);
+      const w = Math.max(1, parseInt(widthInput.value) || 64);
+      const h = Math.max(1, parseInt(heightInput.value) || 48);
+      buffer.width = w;
+      buffer.height = h;
+    }
+
+    function updateFrameInfo() {
+      const currentFrame = Math.round((video.currentTime || 0) / step);
+      frameInfo.textContent = `Frame: ${currentFrame} / ${totalFrames} — Res: ${buffer.width}×${buffer.height}`;
     }
 
     function drawFrame() {
-      // draw into buffer at chosen resolution
+      // draw low-res into buffer
       bctx.clearRect(0, 0, buffer.width, buffer.height);
-      bctx.drawImage(video, 0, 0, buffer.width, buffer.height);
+      try {
+        bctx.drawImage(video, 0, 0, buffer.width, buffer.height);
+      } catch (err) {
+        // cross-origin or not ready; ignore
+      }
 
-      // scale buffer into visible canvas
+      // quantize buffer
+      try {
+        const img = bctx.getImageData(0, 0, buffer.width, buffer.height);
+        applyQuantization(img);
+        bctx.putImageData(img, 0, 0);
+      } catch (err) {
+        // If getImageData fails (rare), just continue without quantization
+        console.warn('Quantization failed:', err);
+      }
+
+      // scale buffer to visible canvas
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(buffer, 0, 0, buffer.width, buffer.height, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(buffer,
+        0, 0, buffer.width, buffer.height,
+        0, 0, canvas.width, canvas.height);
 
       updateFrameInfo();
     }
 
-    function updateFrameInfo() {
-      const currentFrame = Math.round(video.currentTime / step);
-      frameInfo.textContent = `Frame: ${currentFrame} / ${totalFrames}`;
-    }
+    // events
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      video.src = URL.createObjectURL(file);
+      video.load();
+      video.addEventListener('loadedmetadata', () => {
+        setStepFromFPS();
+        setBufferSize();
+        totalFrames = Math.floor(video.duration / step);
+        updateFrameInfo();
+        video.currentTime = 0;
+      }, { once: true });
+    });
 
-    video.addEventListener("seeked", drawFrame);
+    video.addEventListener('seeked', drawFrame);
 
-    nextBtn.addEventListener("click", () => {
+    nextBtn.addEventListener('click', () => {
+      if (!video.duration) return;
       video.currentTime = Math.min(video.currentTime + step, video.duration);
     });
 
-    prevBtn.addEventListener("click", () => {
+    prevBtn.addEventListener('click', () => {
+      if (!video.duration) return;
       video.currentTime = Math.max(video.currentTime - step, 0);
     });
 
-    applyRes.addEventListener("click", () => {
+    applyRes.addEventListener('click', () => {
       setBufferSize();
       setStepFromFPS();
       drawFrame();
     });
+
+    // update display when quant mode changed (for helpful label)
+    quantMode.addEventListener('change', () => {
+      if (quantMode.value === 'perChannel') {
+        bitsInput.max = 8;
+        bitsInput.value = Math.max(1, Math.min(8, parseInt(bitsInput.value) || 2));
+      } else {
+        bitsInput.max = 24;
+        bitsInput.value = Math.max(1, parseInt(bitsInput.value) || 2);
+      }
+    });
+
+    // initialize defaults
+    setBufferSize();
+    setStepFromFPS();
+    drawFrame();
   </script>
 </body>
 </html>
