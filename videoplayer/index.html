@@ -11,6 +11,7 @@
     button { background: #444; color: #eee; cursor: pointer; }
     button:hover { background: #666; }
     h1 { font-size: 1.5rem; margin-top: 20px; }
+    #frameInfo { margin-top: 10px; font-size: 1rem; }
   </style>
 </head>
 <body>
@@ -33,6 +34,8 @@
     <button id="applyRes">Apply</button>
   </div>
 
+  <div id="frameInfo">Frame: 0 / 0</div>
+
   <video id="video" style="display:none"></video>
   <canvas id="canvas"></canvas>
 
@@ -48,8 +51,10 @@
     const widthInput = document.getElementById("width");
     const heightInput = document.getElementById("height");
     const fpsInput = document.getElementById("fps");
+    const frameInfo = document.getElementById("frameInfo");
 
-    let step = 1/30; // default to ~30fps
+    let step = 1/30; 
+    let totalFrames = 0;
 
     fileInput.addEventListener("change", e => {
       const file = e.target.files[0];
@@ -60,6 +65,8 @@
           setStepFromFPS();
           canvas.width = parseInt(widthInput.value);
           canvas.height = parseInt(heightInput.value);
+          totalFrames = Math.floor(video.duration / step);
+          updateFrameInfo();
           video.currentTime = 0;
         }, { once: true });
       }
@@ -68,10 +75,20 @@
     function setStepFromFPS() {
       const fps = parseFloat(fpsInput.value) || 30;
       step = 1 / fps;
+      if (video.duration) {
+        totalFrames = Math.floor(video.duration / step);
+      }
+      updateFrameInfo();
     }
 
     function drawFrame() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      updateFrameInfo();
+    }
+
+    function updateFrameInfo() {
+      const currentFrame = Math.round(video.currentTime / step);
+      frameInfo.textContent = `Frame: ${currentFrame} / ${totalFrames}`;
     }
 
     video.addEventListener("seeked", drawFrame);
