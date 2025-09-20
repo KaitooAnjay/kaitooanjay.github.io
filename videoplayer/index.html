@@ -4,14 +4,50 @@
   <meta charset="UTF-8">
   <title>Frame Picker Video Player</title>
   <style>
-    body { display: flex; flex-direction: column; align-items: center; background: #111; color: #eee; font-family: sans-serif; }
-    canvas { border: 2px solid #444; margin-top: 10px; }
-    .controls { margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-    button, input { padding: 5px; border-radius: 6px; border: none; }
-    button { background: #444; color: #eee; cursor: pointer; }
-    button:hover { background: #666; }
-    h1 { font-size: 1.5rem; margin-top: 20px; }
-    #frameInfo { margin-top: 10px; font-size: 1rem; }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #111;
+      color: #eee;
+      font-family: sans-serif;
+    }
+    canvas {
+      border: 2px solid #444;
+      margin-top: 10px;
+      /* keep visible canvas size fixed */
+      width: 640px;
+      height: 480px;
+      image-rendering: pixelated; /* ensure chunky pixels when scaled */
+    }
+    .controls {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    button, input {
+      padding: 5px;
+      border-radius: 6px;
+      border: none;
+    }
+    button {
+      background: #444;
+      color: #eee;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #666;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-top: 20px;
+    }
+    #frameInfo {
+      margin-top: 10px;
+      font-size: 1rem;
+    }
   </style>
 </head>
 <body>
@@ -24,8 +60,8 @@
     <button id="nextFrame">Next ▶</button>
     <label>
       Resolution: 
-      <input type="number" id="width" value="320" style="width: 60px;"> × 
-      <input type="number" id="height" value="240" style="width: 60px;">
+      <input type="number" id="width" value="64" style="width: 60px;"> × 
+      <input type="number" id="height" value="48" style="width: 60px;">
     </label>
     <label>
       FPS:
@@ -37,13 +73,14 @@
   <div id="frameInfo">Frame: 0 / 0</div>
 
   <video id="video" style="display:none"></video>
-  <canvas id="canvas"></canvas>
+  <canvas id="canvas" width="640" height="480"></canvas>
 
   <script>
     const fileInput = document.getElementById("fileInput");
     const video = document.getElementById("video");
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
 
     const prevBtn = document.getElementById("prevFrame");
     const nextBtn = document.getElementById("nextFrame");
@@ -52,6 +89,11 @@
     const heightInput = document.getElementById("height");
     const fpsInput = document.getElementById("fps");
     const frameInfo = document.getElementById("frameInfo");
+
+    // buffer canvas for low-res rendering
+    const buffer = document.createElement("canvas");
+    const bctx = buffer.getContext("2d");
+    bctx.imageSmoothingEnabled = false;
 
     let step = 1/30; 
     let totalFrames = 0;
@@ -63,8 +105,7 @@
         video.load();
         video.addEventListener("loadedmetadata", () => {
           setStepFromFPS();
-          canvas.width = parseInt(widthInput.value);
-          canvas.height = parseInt(heightInput.value);
+          setBufferSize();
           totalFrames = Math.floor(video.duration / step);
           updateFrameInfo();
           video.currentTime = 0;
@@ -81,8 +122,20 @@
       updateFrameInfo();
     }
 
+    function setBufferSize() {
+      buffer.width = parseInt(widthInput.value);
+      buffer.height = parseInt(heightInput.value);
+    }
+
     function drawFrame() {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // draw into buffer at chosen resolution
+      bctx.clearRect(0, 0, buffer.width, buffer.height);
+      bctx.drawImage(video, 0, 0, buffer.width, buffer.height);
+
+      // scale buffer into visible canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(buffer, 0, 0, buffer.width, buffer.height, 0, 0, canvas.width, canvas.height);
+
       updateFrameInfo();
     }
 
@@ -102,8 +155,7 @@
     });
 
     applyRes.addEventListener("click", () => {
-      canvas.width = parseInt(widthInput.value);
-      canvas.height = parseInt(heightInput.value);
+      setBufferSize();
       setStepFromFPS();
       drawFrame();
     });
