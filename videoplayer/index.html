@@ -26,6 +26,10 @@
       <input type="number" id="width" value="320" style="width: 60px;"> × 
       <input type="number" id="height" value="240" style="width: 60px;">
     </label>
+    <label>
+      FPS:
+      <input type="number" id="fps" value="30" style="width: 60px;">
+    </label>
     <button id="applyRes">Apply</button>
   </div>
 
@@ -43,6 +47,7 @@
     const applyRes = document.getElementById("applyRes");
     const widthInput = document.getElementById("width");
     const heightInput = document.getElementById("height");
+    const fpsInput = document.getElementById("fps");
 
     let step = 1/30; // default to ~30fps
 
@@ -52,13 +57,18 @@
         video.src = URL.createObjectURL(file);
         video.load();
         video.addEventListener("loadedmetadata", () => {
-          step = 1 / (video.frameRate || 30); // fallback if no frameRate metadata
+          setStepFromFPS();
           canvas.width = parseInt(widthInput.value);
           canvas.height = parseInt(heightInput.value);
           video.currentTime = 0;
         }, { once: true });
       }
     });
+
+    function setStepFromFPS() {
+      const fps = parseFloat(fpsInput.value) || 30;
+      step = 1 / fps;
+    }
 
     function drawFrame() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -77,6 +87,7 @@
     applyRes.addEventListener("click", () => {
       canvas.width = parseInt(widthInput.value);
       canvas.height = parseInt(heightInput.value);
+      setStepFromFPS();
       drawFrame();
     });
   </script>
