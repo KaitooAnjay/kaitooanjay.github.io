@@ -1,288 +1,369 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Frame Picker — Pixel & Color Bit Filter</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      background: #111;
-      color: #eee;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      padding: 16px;
-    }
-    canvas {
-      border: 2px solid #444;
-      margin-top: 10px;
-      width: 640px;
-      height: 480px;
-      image-rendering: pixelated;
-      background: black;
-    }
-    .controls {
-      margin-top: 10px;
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      justify-content: center;
-      align-items: center;
-    }
-    button, input, select, label {
-      padding: 6px;
-      border-radius: 6px;
-      border: none;
-      background: #222;
-      color: #eee;
-    }
-    button { cursor: pointer; }
-    button:hover { background: #333; }
-    h1 { font-size: 1.25rem; margin: 8px 0; }
-    #frameInfo { margin-top: 8px; font-size: 0.95rem; }
-    .group { display:flex; gap:6px; align-items:center; }
-  </style>
+<meta charset="utf-8" />
+<title>Frame Picker — Emoji Frame for small resolutions</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root { --visible-w: 640px; --visible-h: 480px; }
+  body {
+    display:flex; flex-direction:column; align-items:center;
+    background:#111; color:#eee; font-family:system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+    padding:16px;
+  }
+  canvas {
+    border:2px solid #444; margin-top:10px;
+    width: var(--visible-w); height: var(--visible-h);
+    image-rendering: pixelated; background:black;
+  }
+  .controls {
+    margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center;
+  }
+  button, input, select, label {
+    padding:6px; border-radius:6px; border:none; background:#222; color:#eee;
+  }
+  button { cursor:pointer; }
+  button:hover { background:#333; }
+  h1 { font-size:1.25rem; margin:8px 0; }
+  #frameInfo { margin-top:8px; font-size:0.95rem; }
+
+  /* Emoji frame styles */
+  #emojiFrame {
+    margin-top:12px;
+    display:none;               /* toggled by JS */
+    background: #0b0b0b;
+    border: 2px solid #444;
+    padding: 6px;
+    box-sizing: border-box;
+  }
+  /* We'll use CSS Grid for layout; JS sets grid-template-columns accordingly */
+  #emojiGrid {
+    display: grid;
+    gap: 0;
+    line-height: 1;
+    justify-items: center;
+    align-items: center;
+  }
+  .emojiPixel {
+    display: inline-block;
+    text-align: center;
+    user-select: none;
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji", emoji;
+  }
+
+  .note { opacity: 0.8; font-size:0.85rem; margin-top:6px; }
+</style>
 </head>
 <body>
-  <h1>Frame Picker — Pixel & Color Bit Filter</h1>
+  <h1>Frame Picker — Emoji Frame for small resolutions</h1>
 
-  <input type="file" id="fileInput" accept="video/*">
+  <input id="fileInput" type="file" accept="video/*">
 
   <div class="controls">
-    <div class="group">
+    <div>
       <button id="prevFrame">◀ Prev</button>
       <button id="nextFrame">Next ▶</button>
     </div>
 
-    <div class="group">
+    <div>
       <label>Resolution:
-        <input type="number" id="width" value="64" style="width:70px"> ×
-        <input type="number" id="height" value="48" style="width:70px">
+        <input id="width" type="number" value="64" style="width:70px"> ×
+        <input id="height" type="number" value="48" style="width:70px">
       </label>
       <button id="applyRes">Apply</button>
     </div>
 
-    <div class="group">
+    <div>
       <label>FPS:
-        <input type="number" id="fps" value="30" style="width:70px">
+        <input id="fps" type="number" value="30" style="width:70px">
       </label>
     </div>
 
-    <div class="group">
+    <div>
       <label>Quant Mode:
         <select id="quantMode">
           <option value="perChannel">Bits per channel</option>
           <option value="palette">Palette (total colors)</option>
         </select>
       </label>
-      <label id="bitsLabel">Bits:
-        <input type="number" id="bits" value="2" min="1" max="8" style="width:70px">
+      <label>Bits:
+        <input id="bits" type="number" value="2" min="1" max="8" style="width:70px">
       </label>
     </div>
 
-    <div class="group">
-      <label>
-        <input type="checkbox" id="grayscale"> Grayscale
-      </label>
+    <div>
+      <label><input id="grayscale" type="checkbox"> Grayscale</label>
     </div>
   </div>
 
-  <div id="frameInfo">Frame: 0 / 0</div>
+  <div id="frameInfo">Frame: 0 / 0 — Res: 64×48</div>
 
   <video id="video" style="display:none"></video>
   <canvas id="canvas" width="640" height="480"></canvas>
 
-  <script>
-    // Elements
-    const fileInput = document.getElementById('fileInput');
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
+  <!-- Emoji frame container (hidden unless small res) -->
+  <div id="emojiFrame" aria-hidden="true">
+    <div id="emojiGrid" role="img" aria-label="Emoji representation of the frame"></div>
+    <div class="note">Emoji view: active when any resolution axis &lt; 100. Each buffer pixel → one emoji.</div>
+  </div>
 
-    const prevBtn = document.getElementById('prevFrame');
-    const nextBtn = document.getElementById('nextFrame');
-    const applyRes = document.getElementById('applyRes');
-    const widthInput = document.getElementById('width');
-    const heightInput = document.getElementById('height');
-    const fpsInput = document.getElementById('fps');
-    const frameInfo = document.getElementById('frameInfo');
-    const quantMode = document.getElementById('quantMode');
-    const bitsInput = document.getElementById('bits');
-    const grayscaleCB = document.getElementById('grayscale');
+<script>
+  // DOM
+  const fileInput = document.getElementById('fileInput');
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
 
-    // Buffer canvas (low-res)
-    const buffer = document.createElement('canvas');
-    const bctx = buffer.getContext('2d');
-    bctx.imageSmoothingEnabled = false;
+  const prevBtn = document.getElementById('prevFrame');
+  const nextBtn = document.getElementById('nextFrame');
+  const applyRes = document.getElementById('applyRes');
+  const widthInput = document.getElementById('width');
+  const heightInput = document.getElementById('height');
+  const fpsInput = document.getElementById('fps');
+  const frameInfo = document.getElementById('frameInfo');
+  const quantMode = document.getElementById('quantMode');
+  const bitsInput = document.getElementById('bits');
+  const grayscaleCB = document.getElementById('grayscale');
 
-    let step = 1 / 30;
-    let totalFrames = 0;
+  const emojiFrame = document.getElementById('emojiFrame');
+  const emojiGrid = document.getElementById('emojiGrid');
 
-    // --- helpers for quantization ---
+  // buffer canvas (low-res)
+  const buffer = document.createElement('canvas');
+  const bctx = buffer.getContext('2d');
+  bctx.imageSmoothingEnabled = false;
 
-    // quantize value (0-255) into "levels" number of levels (levels >= 1)
-    function quantizeChannel(value, levels) {
-      if (levels <= 1) return 0;
-      const t = Math.round((value / 255) * (levels - 1));
-      return Math.round((t / (levels - 1)) * 255);
-    }
+  let step = 1/30;
+  let totalFrames = 0;
 
-    // Given bits per channel, compute levels per channel
-    function levelsFromBitsPerChannel(bits) {
-      const b = Math.max(1, Math.min(8, Math.floor(bits)));
-      return Math.pow(2, b);
-    }
+  // emoji palette: emoji + approximate RGB value
+  // add/remove emojis as you like
+  const emojiPalette = [
+    {emoji: '⬛', rgb: [0,0,0]},
+    {emoji: '⬜', rgb: [255,255,255]},
+    {emoji: '🟥', rgb: [200, 30, 30]},
+    {emoji: '🟩', rgb: [30, 170, 30]},
+    {emoji: '🟦', rgb: [30, 80, 200]},
+    {emoji: '🟨', rgb: [245, 230, 40]},
+    {emoji: '🟧', rgb: [255,140,30]},
+    {emoji: '🟪', rgb: [150,50,170]}
+  ];
 
-    // For palette mode: given totalColors = 2^bits, approximate per-channel levels
-    // by taking cube root and rounding. This is a simple uniform palette approximation.
-    function levelsFromTotalColors(totalColors) {
-      const approx = Math.max(1, Math.round(Math.pow(totalColors, 1 / 3)));
-      return { r: approx, g: approx, b: approx };
-    }
+  // --- quant helpers (same as before) ---
+  function quantizeChannel(value, levels) {
+    if (levels <= 1) return 0;
+    const t = Math.round((value / 255) * (levels - 1));
+    return Math.round((t / (levels - 1)) * 255);
+  }
 
-    // apply quantization to ImageData in-place
-    function applyQuantization(imageData) {
-      const mode = quantMode.value;
-      const bits = Math.max(1, Math.min(24, parseInt(bitsInput.value) || 2));
-      const gs = grayscaleCB.checked;
-      const data = imageData.data;
-      if (mode === 'perChannel') {
-        // bits is used as bits per channel (1-8)
-        const levels = levelsFromBitsPerChannel(bits);
-        for (let i = 0; i < data.length; i += 4) {
-          if (gs) {
-            const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-            const q = quantizeChannel(lum, levels);
-            data[i] = data[i + 1] = data[i + 2] = q;
-          } else {
-            data[i] = quantizeChannel(data[i], levels);       // R
-            data[i + 1] = quantizeChannel(data[i + 1], levels); // G
-            data[i + 2] = quantizeChannel(data[i + 2], levels); // B
-          }
-          // alpha remains
-        }
-      } else {
-        // palette mode: bits = total bits -> totalColors = 2^bits (but we clamp bits to reasonable)
-        const maxBits = Math.min(24, bits);
-        const totalColors = Math.pow(2, maxBits);
-        // approximate levels per channel by cube root of total colors
-        const approx = levelsFromTotalColors(totalColors);
-        const levelsR = approx.r;
-        const levelsG = approx.g;
-        const levelsB = approx.b;
-        for (let i = 0; i < data.length; i += 4) {
-          if (gs) {
-            const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-            const q = quantizeChannel(lum, Math.max(1, Math.round(Math.cbrt(totalColors))));
-            data[i] = data[i + 1] = data[i + 2] = q;
-          } else {
-            data[i] = quantizeChannel(data[i], levelsR);
-            data[i + 1] = quantizeChannel(data[i + 1], levelsG);
-            data[i + 2] = quantizeChannel(data[i + 2], levelsB);
-          }
+  function levelsFromBitsPerChannel(bits) {
+    const b = Math.max(1, Math.min(8, Math.floor(bits)));
+    return Math.pow(2, b);
+  }
+
+  function levelsFromTotalColors(totalColors) {
+    const approx = Math.max(1, Math.round(Math.pow(totalColors, 1/3)));
+    return { r: approx, g: approx, b: approx };
+  }
+
+  function applyQuantization(imageData) {
+    const mode = quantMode.value;
+    const bits = Math.max(1, Math.min(24, parseInt(bitsInput.value) || 2));
+    const gs = grayscaleCB.checked;
+    const data = imageData.data;
+    if (mode === 'perChannel') {
+      const levels = levelsFromBitsPerChannel(bits);
+      for (let i = 0; i < data.length; i += 4) {
+        if (gs) {
+          const lum = Math.round(0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
+          const q = quantizeChannel(lum, levels);
+          data[i] = data[i+1] = data[i+2] = q;
+        } else {
+          data[i]   = quantizeChannel(data[i], levels);
+          data[i+1] = quantizeChannel(data[i+1], levels);
+          data[i+2] = quantizeChannel(data[i+2], levels);
         }
       }
+    } else {
+      const maxBits = Math.min(24, bits);
+      const totalColors = Math.pow(2, maxBits);
+      const approx = levelsFromTotalColors(totalColors);
+      const levelsR = approx.r, levelsG = approx.g, levelsB = approx.b;
+      for (let i = 0; i < data.length; i += 4) {
+        if (gs) {
+          const lum = Math.round(0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
+          const q = quantizeChannel(lum, Math.max(1, Math.round(Math.cbrt(totalColors))));
+          data[i] = data[i+1] = data[i+2] = q;
+        } else {
+          data[i]   = quantizeChannel(data[i], levelsR);
+          data[i+1] = quantizeChannel(data[i+1], levelsG);
+          data[i+2] = quantizeChannel(data[i+2], levelsB);
+        }
+      }
+    }
+  }
+
+  function setStepFromFPS() {
+    const fps = Math.max(1, parseFloat(fpsInput.value) || 30);
+    step = 1 / fps;
+    if (video.duration) totalFrames = Math.floor(video.duration / step);
+    updateFrameInfo();
+  }
+
+  function setBufferSize() {
+    const w = Math.max(1, parseInt(widthInput.value) || 64);
+    const h = Math.max(1, parseInt(heightInput.value) || 48);
+    buffer.width = w; buffer.height = h;
+  }
+
+  function updateFrameInfo() {
+    const currentFrame = Math.round((video.currentTime || 0) / step);
+    frameInfo.textContent = `Frame: ${currentFrame} / ${totalFrames} — Res: ${buffer.width}×${buffer.height}`;
+  }
+
+  // convert a pixel RGB to nearest emoji (by Euclidean distance)
+  function nearestEmojiForPixel(r,g,b) {
+    let best = emojiPalette[0];
+    let bestDist = 1e9;
+    for (const p of emojiPalette) {
+      const dr = r - p.rgb[0];
+      const dg = g - p.rgb[1];
+      const db = b - p.rgb[2];
+      const d = dr*dr + dg*dg + db*db;
+      if (d < bestDist) { bestDist = d; best = p; }
+    }
+    return best.emoji;
+  }
+
+  // Render emoji grid: create grid of buffer.width columns and buffer.height rows
+  function renderEmojiFrame(imageData) {
+    const w = buffer.width, h = buffer.height;
+    // show/hide emojiFrame depending on axis size
+    if (w < 100 || h < 100) {
+      emojiFrame.style.display = 'block';
+    } else {
+      emojiFrame.style.display = 'none';
+      emojiGrid.innerHTML = '';
+      return;
     }
 
-    // --- UI & drawing ---
+    // calculate font/box size so grid fits visible canvas width
+    // visible canvas display width in px
+    const visibleWidth = canvas.clientWidth || parseInt(getComputedStyle(canvas).width) || 640;
+    const visibleHeight = canvas.clientHeight || parseInt(getComputedStyle(canvas).height) || 480;
+    // choose font size so grid fits horizontally (and vertically)
+    const sizeX = Math.floor(visibleWidth / w);
+    const sizeY = Math.floor(visibleHeight / h);
+    const pixelSize = Math.max(6, Math.min(sizeX, sizeY)); // clamp to reasonable size
 
-    function setStepFromFPS() {
-      const fps = Math.max(1, parseFloat(fpsInput.value) || 30);
-      step = 1 / fps;
-      if (video.duration) totalFrames = Math.floor(video.duration / step);
-      updateFrameInfo();
+    emojiGrid.style.gridTemplateColumns = `repeat(${w}, ${pixelSize}px)`;
+    emojiGrid.innerHTML = ''; // clear
+
+    // build fragment
+    const frag = document.createDocumentFragment();
+    const data = imageData.data;
+    // For performance, create spans only once per pixel
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        const r = data[idx], g = data[idx+1], b = data[idx+2];
+        const emoji = nearestEmojiForPixel(r,g,b);
+        const span = document.createElement('span');
+        span.className = 'emojiPixel';
+        span.textContent = emoji;
+        span.style.width = pixelSize + 'px';
+        span.style.height = pixelSize + 'px';
+        span.style.fontSize = Math.max(10, Math.floor(pixelSize * 0.9)) + 'px';
+        span.style.lineHeight = pixelSize + 'px';
+        frag.appendChild(span);
+      }
+    }
+    emojiGrid.appendChild(frag);
+  }
+
+  function drawFrame() {
+    // draw low-res into buffer
+    bctx.clearRect(0,0,buffer.width,buffer.height);
+    try {
+      bctx.drawImage(video, 0, 0, buffer.width, buffer.height);
+    } catch (err) {
+      // ignore if not ready or cross-origin
     }
 
-    function setBufferSize() {
-      const w = Math.max(1, parseInt(widthInput.value) || 64);
-      const h = Math.max(1, parseInt(heightInput.value) || 48);
-      buffer.width = w;
-      buffer.height = h;
+    // quantize buffer
+    let img;
+    try {
+      img = bctx.getImageData(0,0,buffer.width,buffer.height);
+      applyQuantization(img);
+      bctx.putImageData(img, 0, 0);
+    } catch (err) {
+      console.warn('Quantization/getImageData failed:', err);
+      // if fail, try to continue with whatever is on buffer by reading via drawImage->getImageData might still fail; bail emoji
     }
 
-    function updateFrameInfo() {
-      const currentFrame = Math.round((video.currentTime || 0) / step);
-      frameInfo.textContent = `Frame: ${currentFrame} / ${totalFrames} — Res: ${buffer.width}×${buffer.height}`;
-    }
+    // scale buffer to visible canvas
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(buffer, 0, 0, buffer.width, buffer.height, 0, 0, canvas.width, canvas.height);
 
-    function drawFrame() {
-      // draw low-res into buffer
-      bctx.clearRect(0, 0, buffer.width, buffer.height);
+    updateFrameInfo();
+
+    // render emoji frame if small (use quantized image if available)
+    if (img) {
+      renderEmojiFrame(img);
+    } else {
+      // fallback: try to getImageData from buffer (may also fail)
       try {
-        bctx.drawImage(video, 0, 0, buffer.width, buffer.height);
+        const fallback = bctx.getImageData(0,0,buffer.width,buffer.height);
+        renderEmojiFrame(fallback);
       } catch (err) {
-        // cross-origin or not ready; ignore
+        emojiFrame.style.display = 'none';
       }
-
-      // quantize buffer
-      try {
-        const img = bctx.getImageData(0, 0, buffer.width, buffer.height);
-        applyQuantization(img);
-        bctx.putImageData(img, 0, 0);
-      } catch (err) {
-        // If getImageData fails (rare), just continue without quantization
-        console.warn('Quantization failed:', err);
-      }
-
-      // scale buffer to visible canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(buffer,
-        0, 0, buffer.width, buffer.height,
-        0, 0, canvas.width, canvas.height);
-
-      updateFrameInfo();
     }
+  }
 
-    // events
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      video.src = URL.createObjectURL(file);
-      video.load();
-      video.addEventListener('loadedmetadata', () => {
-        setStepFromFPS();
-        setBufferSize();
-        totalFrames = Math.floor(video.duration / step);
-        updateFrameInfo();
-        video.currentTime = 0;
-      }, { once: true });
-    });
+  // events
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    video.src = URL.createObjectURL(file);
+    video.load();
+    video.addEventListener('loadedmetadata', () => {
+      setStepFromFPS(); setBufferSize();
+      totalFrames = Math.floor(video.duration / step);
+      updateFrameInfo();
+      video.currentTime = 0;
+    }, { once:true });
+  });
 
-    video.addEventListener('seeked', drawFrame);
+  video.addEventListener('seeked', drawFrame);
 
-    nextBtn.addEventListener('click', () => {
-      if (!video.duration) return;
-      video.currentTime = Math.min(video.currentTime + step, video.duration);
-    });
+  nextBtn.addEventListener('click', () => {
+    if (!video.duration) return;
+    video.currentTime = Math.min(video.currentTime + step, video.duration);
+  });
 
-    prevBtn.addEventListener('click', () => {
-      if (!video.duration) return;
-      video.currentTime = Math.max(video.currentTime - step, 0);
-    });
+  prevBtn.addEventListener('click', () => {
+    if (!video.duration) return;
+    video.currentTime = Math.max(video.currentTime - step, 0);
+  });
 
-    applyRes.addEventListener('click', () => {
-      setBufferSize();
-      setStepFromFPS();
-      drawFrame();
-    });
+  applyRes.addEventListener('click', () => {
+    setBufferSize(); setStepFromFPS(); drawFrame();
+  });
 
-    // update display when quant mode changed (for helpful label)
-    quantMode.addEventListener('change', () => {
-      if (quantMode.value === 'perChannel') {
-        bitsInput.max = 8;
-        bitsInput.value = Math.max(1, Math.min(8, parseInt(bitsInput.value) || 2));
-      } else {
-        bitsInput.max = 24;
-        bitsInput.value = Math.max(1, parseInt(bitsInput.value) || 2);
-      }
-    });
+  quantMode.addEventListener('change', () => {
+    if (quantMode.value === 'perChannel') {
+      bitsInput.max = 8;
+      bitsInput.value = Math.max(1, Math.min(8, parseInt(bitsInput.value) || 2));
+    } else {
+      bitsInput.max = 24;
+      bitsInput.value = Math.max(1, parseInt(bitsInput.value) || 2);
+    }
+  });
 
-    // initialize defaults
-    setBufferSize();
-    setStepFromFPS();
-    drawFrame();
-  </script>
+  // init
+  setBufferSize(); setStepFromFPS(); drawFrame();
+</script>
 </body>
 </html>
