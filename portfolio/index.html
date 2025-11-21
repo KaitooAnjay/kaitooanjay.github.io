@@ -70,11 +70,17 @@
     }
 
     /* Slash bar (animated) */
-    .slash-bar{
-      position:absolute; height:28px; width:2px; background:var(--accent);
-      top:calc((var(--nav-height) - 28px)/2); left:0; transform-origin:center; border-radius:2px;
-      opacity:0.85; box-shadow:0 4px 18px rgba(43,139,255,0.16);
+   .slash-bar {
+      position: absolute;
+      bottom: 6px;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--accent);
+      opacity: 0.9;
+      box-shadow: 0 4px 18px rgba(43,139,255,0.16);
     }
+
+    
 
     /* Profile */
     .hero{display:grid; grid-template-columns: 1fr 360px; gap:26px; align-items:start; margin-top:26px}
@@ -257,10 +263,11 @@
     <div class="modal-close" style="position:fixed; top:18px; right:18px">
       <button class="btn" id="closeModalBtn" aria-label="Close video">Close</button>
     </div>
+    <div id="modalDesc"></div>
   </div>
 
   <!-- GSAP for tweens -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" integrity="sha512-RANDOM" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 
   <script>
     // Basic helpers and initial state
@@ -282,17 +289,19 @@
 
     // Utility: animate slash bar to active nav item
     function moveSlashTo(element, immediate=false){
-      if(!element) return;
       const rect = element.getBoundingClientRect();
       const navRect = navList.getBoundingClientRect();
-      const x = rect.left - navRect.left + rect.width/2 - (slashBar.offsetWidth/2);
-      const y = (navRect.height - slashBar.offsetHeight)/2;
-      if(immediate){
-        gsap.set(slashBar, {x, y, opacity:1});
+      
+      const x = rect.left - navRect.left;
+      const width = rect.width;
+
+      if (immediate) {
+        gsap.set(slashBar, {x, width});
       } else {
-        gsap.to(slashBar, {duration:0.45, x, y, ease: 'power3.out'});
+        gsap.to(slashBar, {duration: 0.45, x, width, ease: 'power3.out'});
       }
     }
+
 
     // Set active nav item
     function setActivePath(path, push=true){
@@ -366,12 +375,18 @@
       modal.setAttribute('aria-hidden','false');
       // create iframe lazily
       const iframe = document.createElement('iframe');
-      iframe.src = `https://www.youtube.com/embed/${ytid}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1`;
+      iframe.src = `https://www.youtube.com/embed/${ytid}?autoplay=1&rel=0&modestbranding=1`;
+
       iframe.setAttribute('allow','autoplay; encrypted-media; picture-in-picture');
       iframe.setAttribute('allowfullscreen','');
       iframe.style.width='100%'; iframe.style.height='100%'; iframe.style.border='0';
       modalInner.innerHTML='';
       modalInner.appendChild(iframe);
+
+      // set modal description (for accessibility)
+      const title = document.querySelector(`.video-card[data-ytid="${ytid}"] .video-title`)?.textContent;
+      document.getElementById('modalDesc').textContent = title || '';
+
       // modal animation
       gsap.fromTo(modal, {autoAlpha:0}, {duration:0.32, autoAlpha:1});
       gsap.fromTo(modalInner, {scale:0.96, autoAlpha:0}, {duration:0.46, scale:1, autoAlpha:1, ease:'back.out(1.1)'});
